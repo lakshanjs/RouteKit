@@ -14,10 +14,10 @@
             "LakshanJS\\RouteKit\\": "src/"
         },
         "files": [
-            "src/function.php"
+            "src/functions.php"
         ]
     },
     "require": {
-        "php": ">=7.4"
+        "php": ">=8.2"
     }
 }

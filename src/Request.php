@@ -1,38 +1,79 @@
 <?php
 
+declare(strict_types=1);
+
 namespace LakshanJS\RouteKit;
 
+/**
+ * Class Request
+ *
+ * Handles HTTP request details and provides methods to retrieve client information.
+ *
+ * @property array  $server    Server variables.
+ * @property string $protocol   HTTP protocol (http/https).
+ * @property string $hostname   Hostname without port.
+ * @property array  $query      Query parameters from GET.
+ * @property string $url        Base URL.
+ * @property string $servername Server name.
+ * @property array  $body       Request body parameters.
+ * @property array  $headers    HTTP request headers.
+ * @property string $path       Processed request path.
+ * @property bool   $secure     Whether the connection is secure.
+ * @property bool   $ajax       Whether the request is an AJAX call.
+ * @property array  $args       Additional arguments.
+ * @property string $method     HTTP method (GET, POST, etc.).
+ * @property string|null $port  Server port.
+ * @property string $fullurl    Full URL including query parameters.
+ * @property string $curl       Combined URL and path.
+ * @property string $extension  File extension of the request path.
+ * @property array  $files      Uploaded files.
+ * @property array  $cookies    Request cookies.
+ */
 #[\AllowDynamicProperties]
 class Request
 {
-    private static $instance;
+    /**
+     * The singleton instance of the Request.
+     *
+     * @var self|null
+     */
+    private static ?self $instance = null;
 
-    public $server;
-    public $protocol;
-    public $hostname;
-    public $query;
-    public $url;
-    public $servername;
-    public $body;
-    public $headers;
-    public $path;
-    public $secure;
-    public $ajax;
-    public $args;
-    public $method;
+    public array $server;
+    public string $protocol;
+    public string $hostname;
+    public array $query;
+    public string $url;
+    public string $servername;
+    public array $body;
+    public array $headers;
+    public string $path;
+    public bool $secure;
+    public bool $ajax;
+    public array $args;
+    public string $method;
+    public ?string $port;
+    public string $fullurl;
+    public string $curl;
+    public string $extension;
+    public array $files;
+    public array $cookies;
 
     /**
-     * Constructor - Define some variables.
+     * Request constructor.
+     *
+     * Initializes request-related properties based on PHP superglobals.
      */
     public function __construct()
     {
         $this->server = $_SERVER;
 
-        $uri = parse_url($this->server["REQUEST_URI"], PHP_URL_PATH);
+        // Parse the request URI to determine the path.
+        $uri    = parse_url($this->server['REQUEST_URI'], PHP_URL_PATH);
         $script = $_SERVER['SCRIPT_NAME'];
         $parent = dirname($script);
 
-        // Fix path if not running on domain or local domain.
+        // Adjust the path based on the script location.
         if (stripos($uri, $script) !== false) {
             $this->path = substr($uri, strlen($script));
         } elseif (stripos($uri, $parent) !== false) {
@@ -41,186 +82,216 @@ class Request
             $this->path = $uri;
         }
         $this->path = preg_replace('/\/+/', '/', '/' . trim(urldecode($this->path), '/') . '/');
-        $this->hostname = str_replace('/:(.*)$/', "", $_SERVER['HTTP_HOST']);
+
+        // Remove the port (if any) from HTTP_HOST.
+        $this->hostname = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST']);
         $this->servername = empty($_SERVER['SERVER_NAME']) ? $this->hostname : $_SERVER['SERVER_NAME'];
-        $this->secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' || isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https';
-        $this->port = isset($_SERVER['SERVER_PORT']) ? $_SERVER['SERVER_PORT'] : null;
+
+        // Determine if the connection is secure.
+        $this->secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
+        $this->port = isset($_SERVER['SERVER_PORT']) ? (string) $_SERVER['SERVER_PORT'] : null;
         $this->protocol = $this->secure ? 'https' : 'http';
         $this->url = strtolower($this->protocol . '://' . $this->servername);
-        $this->fullurl = strtolower($this->protocol . '://' . $this->servername) .  str_replace($this->path, '', $this->server['REQUEST_URI']);
-        if($this->servername == 'localhost'){
+
+        // Build the full URL by removing the path from the REQUEST_URI.
+        $this->fullurl = strtolower($this->protocol . '://' . $this->servername)
+            . str_replace($this->path, '', $this->server['REQUEST_URI']);
+
+        // Adjust URL for localhost.
+        if ($this->servername === 'localhost') {
             $this->url = strtolower(
-                $this->protocol . '://' . $this->servername . "/" .
-                str_replace($this->path, '', $this->server['REQUEST_URI'])
+                $this->protocol . '://' . $this->servername . "/"
+                . str_replace($this->path, '', $this->server['REQUEST_URI'])
             );
         }
+
+        // Combine the base URL with the path.
         $this->curl = rtrim($this->url, '/') . $this->path;
-        $this->extension = pathinfo($this->path, PATHINFO_EXTENSION);
-        $this->headers = call_user_func(function () {
-            $r = [];
-            foreach ($_SERVER as $k => $v) {
-                if (stripos($k, 'http_') !== false) {
-                    $r[strtolower(substr($k, 5))] = $v;
+        $this->extension = (string) pathinfo($this->path, PATHINFO_EXTENSION);
+
+        // Extract HTTP headers from server variables.
+        $this->headers = (function (): array {
+            $result = [];
+            foreach ($_SERVER as $key => $value) {
+                // Check if the key starts with "http_"
+                if (stripos($key, 'http_') === 0) {
+                    $result[strtolower(substr($key, 5))] = $value;
                 }
             }
-            return $r;
-        });
+            return $result;
+        })();
+
         $this->method = $_SERVER['REQUEST_METHOD'];
         $this->query = $_GET;
-        $this->args = [];
-        foreach ($this->query as $k => $v) {
-            $this->query[$k] = preg_replace('/\/+/', '/', str_replace(['..', './'], ['', '/'], $v));
+        $this->args  = [];
+
+        // Sanitize query parameters.
+        foreach ($this->query as $key => $value) {
+            $this->query[$key] = preg_replace('/\/+/', '/', str_replace(['..', './'], ['', '/'], $value));
         }
 
-        if (isset($this->headers['content_type']) && $this->headers['content_type'] == 'application/x-www-form-urlencoded') {
-            parse_str(file_get_contents("php://input"), $input);
+        // Read input based on content type.
+        if (isset($this->headers['content_type']) && $this->headers['content_type'] === 'application/x-www-form-urlencoded') {
+            parse_str(file_get_contents('php://input'), $input);
         } else {
-            $input = json_decode(file_get_contents("php://input"), true);
+            $input = json_decode(file_get_contents('php://input'), true);
         }
 
         $this->body = is_array($input) ? $input : [];
         $this->body = array_merge($this->body, $_POST);
-        $this->files = isset($_FILES) ? $_FILES : [];
+        $this->files = $_FILES ?? [];
         $this->cookies = $_COOKIE;
-        $x_requested_with = isset($this->headers['x_requested_with']) ? $this->headers['x_requested_with'] : false;
-        $this->ajax = $x_requested_with === 'XMLHttpRequest';
+        $xRequestedWith = $this->headers['x_requested_with'] ?? false;
+        $this->ajax = ($xRequestedWith === 'XMLHttpRequest');
     }
 
     /**
-     * Singleton instance.
+     * Retrieves the singleton instance of the Request.
      *
-     * @return $this
+     * @return static The Request instance.
      */
-    public static function instance()
+    public static function instance(): static
     {
-        if (null === static::$instance) {
-            static::$instance = new static;
+        if (static::$instance === null) {
+            static::$instance = new static();
         }
         return static::$instance;
     }
 
     /**
-     * Get user IP.
+     * Returns the client's IP address.
      *
-     * @return string
+     * Checks various server variables to determine the client's IP.
+     *
+     * @return string The client's IP address, or 'unknown' if not valid.
      */
-    public function ip()
+    public function ip(): string
     {
-        if (isset($_SERVER["HTTP_CLIENT_IP"])) {
-            $ip = $_SERVER["HTTP_CLIENT_IP"];
-        } elseif (isset($_SERVER["HTTP_X_FORWARDED_FOR"])) {
-            $ip = $_SERVER["HTTP_X_FORWARDED_FOR"];
-        } elseif (isset($_SERVER["HTTP_X_FORWARDED"])) {
-            $ip = $_SERVER["HTTP_X_FORWARDED"];
-        } elseif (isset($_SERVER["HTTP_FORWARDED_FOR"])) {
-            $ip = $_SERVER["HTTP_FORWARDED_FOR"];
-        } elseif (isset($_SERVER["HTTP_FORWARDED"])) {
-            $ip = $_SERVER["HTTP_FORWARDED"];
-        } elseif (isset($_SERVER["REMOTE_ADDR"])) {
-            $ip = $_SERVER["REMOTE_ADDR"];
+        if (isset($_SERVER['HTTP_CLIENT_IP'])) {
+            $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } elseif (isset($_SERVER['HTTP_X_FORWARDED'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED'];
+        } elseif (isset($_SERVER['HTTP_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_FORWARDED_FOR'];
+        } elseif (isset($_SERVER['HTTP_FORWARDED'])) {
+            $ip = $_SERVER['HTTP_FORWARDED'];
+        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
+            $ip = $_SERVER['REMOTE_ADDR'];
         } else {
-            $ip = getenv("REMOTE_ADDR");
+            $ip = getenv('REMOTE_ADDR') ?: 'unknown';
         }
 
-        if(strpos($ip, ',') !== false){
+        // If multiple IP addresses are returned, use the first one.
+        if (strpos($ip, ',') !== false) {
             $ip = explode(',', $ip)[0];
         }
 
-        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            return 'unknown';
-        }
-
-        return $ip;
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
     }
 
     /**
-     * Get user browser.
+     * Returns the client's browser name.
      *
-     * @return string
+     * @return string The browser name, or 'unknown' if not detected.
      */
-    public function browser()
+    public function browser(): string
     {
-        if (strpos($this->server['HTTP_USER_AGENT'], 'Opera') || strpos($this->server['HTTP_USER_AGENT'], 'OPR/')) {
+        $userAgent = $this->server['HTTP_USER_AGENT'] ?? '';
+        if (stripos($userAgent, 'Opera') !== false || stripos($userAgent, 'OPR/') !== false) {
             return 'Opera';
-        } elseif (strpos($this->server['HTTP_USER_AGENT'], 'Edge')) {
+        } elseif (stripos($userAgent, 'Edge') !== false) {
             return 'Edge';
-        } elseif (strpos($this->server['HTTP_USER_AGENT'], 'Chrome')) {
+        } elseif (stripos($userAgent, 'Chrome') !== false) {
             return 'Chrome';
-        } elseif (strpos($this->server['HTTP_USER_AGENT'], 'Safari')) {
+        } elseif (stripos($userAgent, 'Safari') !== false) {
             return 'Safari';
-        } elseif (strpos($this->server['HTTP_USER_AGENT'], 'Firefox')) {
+        } elseif (stripos($userAgent, 'Firefox') !== false) {
             return 'Firefox';
-        } elseif (strpos($this->server['HTTP_USER_AGENT'], 'MSIE') || strpos($this->server['HTTP_USER_AGENT'], 'Trident/7')) {
+        } elseif (stripos($userAgent, 'MSIE') !== false || stripos($userAgent, 'Trident/7') !== false) {
             return 'Internet Explorer';
         }
         return 'unknown';
     }
 
     /**
-     * Get user platform.
+     * Returns the client's platform (operating system).
      *
-     * @return string
+     * @return string The platform name, or 'unknown' if not detected.
      */
-    public function platform()
+    public function platform(): string
     {
-        if (preg_match('/linux/i', $this->server['HTTP_USER_AGENT'])) {
+        $userAgent = $this->server['HTTP_USER_AGENT'] ?? '';
+        if (preg_match('/linux/i', $userAgent)) {
             return 'linux';
-        } elseif (preg_match('/macintosh|mac os x/i', $this->server['HTTP_USER_AGENT'])) {
+        } elseif (preg_match('/macintosh|mac os x/i', $userAgent)) {
             return 'mac';
-        } elseif (preg_match('/windows|win32/i', $this->server['HTTP_USER_AGENT'])) {
+        } elseif (preg_match('/windows|win32/i', $userAgent)) {
             return 'windows';
         }
         return 'unknown';
     }
 
     /**
-     * Check whether user has connected from a mobile device (tablet, etc).
+     * Determines if the request comes from a mobile device.
      *
-     * @return bool
+     * Checks the User Agent string for patterns commonly associated with mobile devices.
+     *
+     * @return bool True if the request is from a mobile device, false otherwise.
      */
-    public function isMobile()
+    public function isMobile(): bool
     {
-        $aMobileUA = array(
-            '/iphone/i' => 'iPhone',
-            '/ipod/i' => 'iPod',
-            '/ipad/i' => 'iPad',
-            '/android/i' => 'Android',
-            '/blackberry/i' => 'BlackBerry',
-            '/webos/i' => 'Mobile'
-        );
+        $mobileUserAgents = [
+            '/iphone/i'    => 'iPhone',
+            '/ipod/i'      => 'iPod',
+            '/ipad/i'      => 'iPad',
+            '/android/i'   => 'Android',
+            '/blackberry/i'=> 'BlackBerry',
+            '/webos/i'     => 'Mobile',
+        ];
 
-        // Return true if mobile User Agent is detected.
-        foreach ($aMobileUA as $sMobileKey => $sMobileOS) {
-            if (preg_match($sMobileKey, $_SERVER['HTTP_USER_AGENT'])) {
+        $userAgent = $this->server['HTTP_USER_AGENT'] ?? '';
+        foreach ($mobileUserAgents as $pattern => $device) {
+            if (preg_match($pattern, $userAgent)) {
                 return true;
             }
         }
-        // Otherwise, return false.
         return false;
     }
 
     /**
-     * Magic call.
+     * Handles dynamic method calls.
      *
-     * @param string $method
-     * @param array $args
+     * If a property with the specified name exists and is callable, it invokes it.
      *
-     * @return mixed
+     * @param string $method The method name.
+     * @param array  $args   The arguments for the method call.
+     *
+     * @return mixed The result of the dynamic method call, or null if not callable.
      */
-    public function __call($method, $args)
+    public function __call(string $method, array $args): mixed
     {
-        return isset($this->{$method}) && is_callable($this->{$method})
-            ? call_user_func_array($this->{$method}, $args) : null;
+        if (isset($this->{$method}) && is_callable($this->{$method})) {
+            return call_user_func_array($this->{$method}, $args);
+        }
+        return null;
     }
 
     /**
-     * Set new variables and functions to this class.
+     * Sets dynamic properties.
      *
-     * @param string $k
-     * @param mixed $v
+     * If the provided value is a Closure, it binds it to the current instance.
+     *
+     * @param string $property The property name.
+     * @param mixed  $value    The value to set.
+     *
+     * @return void
      */
-    public function __set($k, $v)
+    public function __set(string $property, mixed $value): void
     {
-        $this->{$k} = $v instanceof \Closure ? $v->bindTo($this) : $v;
+        $this->{$property} = $value instanceof \Closure ? $value->bindTo($this) : $value;
     }
 }
