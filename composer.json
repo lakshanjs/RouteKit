@@ -1,0 +1,23 @@
+{
+    "name": "lakshanjs/routekit",
+    "description": "A lightweight routing and request handling package for PHP.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Lakshan Jayasinghe",
+            "email": "lakshan.jayasinghe@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "LakshanJS\\": "src/"
+        },
+        "files": [
+            "src/function.php"
+        ]
+    },
+    "require": {
+        "php": ">=7.4"
+    }
+}
