@@ -3,7 +3,6 @@
 namespace LakshanJS\RouteKit;
 
 use Closure;
-use LakshanJS\RouteKit\Str;
 
 class Route
 {
@@ -57,7 +56,9 @@ class Route
     public function __construct(Request $req)
     {
         $this->req = $req;
-        //defined('URL') || define('URL', $req->url);
+        if (!defined('URL')) {
+            define('URL', $req->url);
+        }
     }
 
     /**
@@ -261,6 +262,10 @@ class Route
         }
     }
 
+    public static function camelCase($str) {
+		return preg_split('/(?<=\\w)(?=[A-Z])/', $str);
+	}
+
     public function controller($uri, $controller, $options = [])
     {
         $controller = $controller;
@@ -269,7 +274,7 @@ class Route
             $methods = get_class_methods($controller);
             foreach ($methods as $k => $v)
             {
-                $split 		= Str::camelCase($v);
+                $split 		= $this->camelCase($v);
                 $request 	= strtoupper(array_shift($split));
                 $fullUri 	= $uri .'/'. implode('-', $split);
 
