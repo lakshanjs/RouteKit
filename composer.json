@@ -11,7 +11,7 @@
     ],
     "autoload": {
         "psr-4": {
-            "LakshanJS\\": "src/"
+            "LakshanJS\\RouteKit\\": "src/"
         },
         "files": [
             "src/function.php"
