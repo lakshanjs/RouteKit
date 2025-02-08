@@ -2,6 +2,8 @@
 
 RouteKit is a lightweight and flexible PHP routing package that allows you to handle URL routing effortlessly in your applications.
 
+RouteKit is based on nezamy/route:1.2.2, enabling you to quickly and easily build RESTful web applications.
+
 ## Installation
 
 ```terminal
@@ -254,4 +256,77 @@ $route->any('/about', function(){
 app();  // app instance
 route();// shortcut for Route::getRoute()
 url();  // get domain url
+```
+
+## Registering
+
+```php
+// Variables
+app()->x = 'something';
+echo app()->x; // something
+// OR
+echo app('x'); // something
+
+// Functions
+app()->calc = function($a, $b){
+    echo $a + $b;
+}
+echo app()->calc(5, 4); //9
+
+// Classes
+class myClass {
+
+}
+app()->myClass = new myClass;
+pre( app('myClass') );
+```
+
+## Request
+
+```php
+app('request')->server; //$_SERVER
+app('request')->path; // uri path
+app('request')->hostname;
+app('request')->servername;
+app('request')->port;
+app('request')->protocol; // http or https
+app('request')->url; // domain url
+app('request')->curl; // current url
+app('request')->extension; // get url extension
+app('request')->headers; // all http headers
+app('request')->method; // Request method
+app('request')->query; // $_GET
+app('request')->body; // $_POST and php://input
+app('request')->args; // all route args
+app('request')->files; // $_FILES
+app('request')->cookies; // $_COOKIE
+app('request')->ajax; // check if request is sent by ajax or not
+app('request')->ip(); // get client IP
+app('request')->browser(); // get client browser
+app('request')->platform(); // get client platform
+app('request')->isMobile(); // check if client opened from mobile or tablet
+
+// You can append vars functions classes to request class
+app('request')->addsomething = function(){
+    return 'something';
+};
+```
+
+## Autoload
+
+```php
+<?php
+namespace App;
+class homeController
+{
+    public function index()
+    {
+        # code...
+    }
+}
+```
+
+```php
+// Call the class with a namespace
+$route->get('/', 'App\homeController@index');
 ```
