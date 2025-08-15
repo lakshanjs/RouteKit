@@ -1,31 +1,29 @@
 # RouteKit
 
-RouteKit is a lightweight and flexible PHP routing package that allows you to handle URL routing effortlessly in your applications.
-
-RouteKit is based on nezamy/route:1.2.2, enabling you to quickly and easily build RESTful web applications.
+RouteKit is a lightweight routing and request handling library for PHP. The
+package is inspired by [`nezamy/route`](https://github.com/nezamy/route) and
+provides a small but expressive API for building web applications.
 
 ## Installation
 
-```terminal
-$ composer require lakshanjs/routekit
+```bash
+composer require lakshanjs/routekit
 ```
 
-Route requires PHP 8.2 or newer.
+RouteKit requires PHP 8.1 or newer.
 
-## Usage
+## Quick start
 
-Create an `index.php` file with the following contents:
+Create an `index.php` file and bootstrap the application:
 
 ```php
 <?php
 
-define('BASE_PATH', __DIR__ . DS, TRUE);
-
-require BASE_PATH.'vendor/autoload.php';
-
 use LakshanJS\RouteKit\App;
 use LakshanJS\RouteKit\Route;
 use LakshanJS\RouteKit\Request;
+
+require __DIR__ . '/vendor/autoload.php';
 
 $app = App::instance();
 $app->request = Request::instance();
@@ -33,300 +31,217 @@ $app->route = Route::instance($app->request);
 
 $route = $app->route;
 
-$route->any('/', function() {
+$route->any('/', function () {
     echo 'Hello World';
 });
 
 $route->end();
 ```
 
-If using Apache, make sure the `.htaccess` file exists beside `index.php`.
+If you are using Apache, place an `.htaccess` file next to `index.php` so all
+requests are directed to the entry script.
 
-## How it works
+## Helper functions
 
-Routing is done by matching a URL pattern with a callback function.
+Three global helper functions are provided for convenience:
 
 ```php
-$route->any('/', function(){
-    echo 'Hello World';
+app();            // Retrieve the App singleton or a property on it
+url('docs');      // Base URL with an optional path
+route('home');    // URL for a named route
+```
+
+These helpers are defined in `src/functions.php` and are automatically loaded by
+Composer.
+
+## Defining routes
+
+Routes are registered by calling HTTP verb methods on the `Route` instance. Each
+method accepts a URI pattern and a callback.
+
+```php
+$route->get('/', fn () => echo 'GET home');
+$route->post('/contact', fn () => echo 'POST contact');
+$route->put('/user/{id}', fn ($id) => echo "Update $id");
+$route->delete('/user/{id}', fn ($id) => echo "Delete $id");
+
+// Match any method
+$route->any('/status', fn () => echo 'OK');
+
+// Multiple methods at once
+$route->get_post('/form', fn () => echo 'GET or POST form');
+```
+
+### Multiple URIs
+
+An array of URIs can be supplied to match several paths with one callback:
+
+```php
+$route->get(['/', '/home', '/index'], fn () => echo 'Homepage');
+```
+
+### Route parameters
+
+Routes may contain parameters that are passed to the callback in the order they
+appear. The `/?` placeholder matches a single path segment:
+
+```php
+$route->get('/post/?', function ($id) {
+    echo "Post ID: $id";
 });
 
-$route->any('/about', function(){
-    echo 'About';
+$route->get('/post/?/?', function ($id, $title) {
+    echo "Post $id with title $title";
 });
 ```
 
-### Example Outputs
+#### Named parameters
 
-```
-http://yoursite.com/ -> Hello World
-http://yoursite.com/about -> About
-```
-
-## Callback Functions
-
-The callback can be any object that is callable. You can use a regular function:
+Parameters can be named using `{name}` which allows accessing them by variable
+name or from the `$this` context inside the callback:
 
 ```php
-function pages(){
-    echo 'Page Content';
-}
-$route->get('/', 'pages');
+$route->get('/{username}/{page}', function ($username, $page) {
+    echo "User $username on $page";
+    // or
+    echo $this['username'];
+});
 ```
 
-Or a class method:
+#### Regular expressions
+
+Custom patterns may be supplied after the parameter name. Built‑in shortcuts are
+available for common patterns such as `:int`, `:title` and more:
 
 ```php
-class home {
-    function pages(){
-        echo 'Home page Content';
+$route->get('/{username}:([0-9a-z_.-]+)/post/{id}:int',
+    function ($username, $id) {
+        echo "Author $username, post $id";
     }
-}
-$route->get('/', ['home', 'pages']);
-// OR
-$home = new home;
-$route->get('/', [$home, 'pages']);
-// OR
-$route->get('/', 'home@pages');
+);
 ```
 
-## Method Routing
+#### Optional parameters
+
+Append a `?` to make a parameter optional:
 
 ```php
-$route->any('/', function(){
-    // Any method requests
-});
-
-$route->get('/', function(){
-    // Only GET requests
-});
-
-$route->post('/', function(){
-    // Only POST requests
-});
-
-$route->put('/', function(){
-    // Only PUT requests
-});
-
-$route->patch('/', function(){
-    // Only PATCH requests
-});
-
-$route->delete('/', function(){
-    // Only DELETE requests
-});
-
-// Multiple methods
-$route->get_post('/', function(){
-    // Only GET and POST request
-});
-```
-
-## Multiple Routing (All in one)
-
-```php
-$route->get(['/', 'index', 'home'], function(){
-    // Will match 3 pages in one
-});
-```
-
-## Parameters
-
-This example will match any page name:
-
-```php
-$route->get('/?', function($page){
-    echo "you are in $page";
-});
-```
-
-Match anything after `post/`:
-
-```php
-$route->get('/post/?', function($id){
-    echo "post id $id";
-});
-```
-
-More than one parameter:
-
-```php
-$route->get('/post/?/?', function($id, $title){
-    echo "post id $id and title $title";
-});
-```
-
-## Named Parameters
-
-```php
-$route->get('/{username}/{page}', function($username, $page){
-    echo "Username $username and Page $page <br>";
-    // OR
-    echo "Username {$this['username']} and Page {$this['page']}";
-});
-```
-
-## Regular Expressions
-
-```php
-$route->get('/{username}:([0-9a-z_.-]+)/post/{id}:([0-9]+)',
-function($username, $id){
-    echo "author $username post id $id";
-});
-```
-
-## Optional Parameters
-
-```php
-$route->get('/post/{title}?:title/{date}?', function($title, $date){
-    if($title){
-        echo "<h1>$title</h1>";
-    }else{
-        echo "<h1>Posts List</h1>";
-    }
-    if($date){
+$route->get('/post/{title}?:title/{date}?', function ($title, $date) {
+    echo $title ? "<h1>$title</h1>" : '<h1>Posts</h1>';
+    if ($date) {
         echo "<small>Published $date</small>";
     }
 });
 ```
 
-## Groups
+### Naming routes and generating URLs
+
+Use `as()` to assign a name to a route. The `route()` helper or
+`Route::getRoute()` can then generate URLs for that name:
 
 ```php
-$route->group('/admin', function(){
-    $this->get('/', function(){
-        echo 'welcome to admin panel';
-    });
-    $this->get('/settings', function(){
-        echo 'list of settings';
-    });
-    $this->group('/users', function(){
-        $this->get('/', function(){
-            echo 'list of users';
-        });
-        $this->get('/add', function(){
-            echo 'add new user';
-        });
-    });
-    $this->any('/*', function(){
-        pre("Page ( {$this->app->request->path} ) Not Found", 6);
+$route->get('/', fn () => echo 'Home')->as('home');
+$route->get('/about', fn () => echo 'About')->as('about');
+
+echo route('about');        // outputs full URL to /about
+echo $route->getRoute('home'); // returns the path '/'
+```
+
+### Groups
+
+Routes can be grouped under a common prefix. Groups may be nested and can also
+specify a name prefix via the `as` option:
+
+```php
+$route->group('/admin', function () {
+    $this->get('/', fn () => echo 'Admin dashboard');
+    $this->group('/users', function () {
+        $this->get('/', fn () => echo 'User list');
     });
 });
 ```
 
-## Middleware
+### Controllers and resources
+
+RouteKit can automatically build routes from controller classes.
 
 ```php
-$route->use(function(){
-    pre('Do something before all routes', 3);
-});
-
-$route->before('/', function(){
-    pre('Do something before all routes', 4);
-});
-
-$route->after('/admin|home', function(){
-    pre('Do something after admin and home only', 6);
-});
+$route->controller('/account', App\Controller\AccountController::class);
+$route->resource('/posts', App\Controller\PostController::class);
 ```
 
-## Controllers and Resources
+`controller()` registers a route for each public method using the HTTP verb
+prefix (e.g. `getIndex`, `postUpdate`). `resource()` creates standard CRUD routes
+(`index`, `create`, `store`, `show`, `edit`, `update`, `destroy`).
+
+### Middleware
+
+Middleware can run before or after matched routes. Use `use()` to register a
+global middleware, or `before()` / `after()` for specific URIs:
 
 ```php
-$route->controller('/controller', 'App\Controller\testController');
-$route->resource('/resource', 'App\Controller\testResource');
+$route->use(fn () => echo "Before every route");
+
+$route->before('/admin/*', fn () => echo 'Checking admin access...');
+$route->after('/admin/*', fn () => echo 'Admin route completed');
 ```
 
-## Route Name
+### Permissions
+
+You may attach arbitrary permission data to a route. The information is stored on
+the `Request` object for the matched route:
 
 ```php
-$route->any('/', function(){
-    echo route('about');
-})->as('home');
+$route->get('/dashboard', function () {
+    // ...
+})->permissions(['admin']);
 
-$route->any('/about', function(){
-    echo route('home');
-})->as('about');
+$route->end();
+
+// Later inside a callback
+$perms = app('request')->permissions; // ['admin']
 ```
 
-## Shortcut Functions
+## Request helper
+
+The `Request` singleton exposes information about the current HTTP request:
 
 ```php
-app();  // app instance
-route();// shortcut for Route::getRoute()
-url();  // get domain url
+$req = app('request');
+$req->path;       // Normalized request path
+$req->url;        // Base URL
+$req->curl;       // Full current URL
+$req->method;     // HTTP method
+$req->headers;    // Array of headers
+$req->query;      // $_GET parameters
+$req->body;       // Parsed request body
+$req->files;      // Uploaded files
+$req->cookies;    // $_COOKIE values
+$req->ajax;       // Whether the request was made via AJAX
+
+// Utility methods
+$req->ip();       // Client IP address
+$req->browser();  // Browser name
+$req->platform(); // Operating system
+$req->isMobile(); // True if user agent is a mobile device
 ```
 
-## Registering
+## The App container
+
+`App` acts as a simple container. You may register values, services or
+closures directly on the instance:
 
 ```php
-// Variables
-app()->x = 'something';
-echo app()->x; // something
-// OR
-echo app('x'); // something
+app()->version = '1.0';
+echo app('version'); // 1.0
 
-// Functions
-app()->calc = function($a, $b){
-    echo $a + $b;
-}
-echo app()->calc(5, 4); //9
-
-// Classes
-class myClass {
-
-}
-app()->myClass = new myClass;
-pre( app('myClass') );
-```
-
-## Request
-
-```php
-app('request')->server; //$_SERVER
-app('request')->path; // uri path
-app('request')->hostname;
-app('request')->servername;
-app('request')->port;
-app('request')->protocol; // http or https
-app('request')->url; // domain url
-app('request')->curl; // current url
-app('request')->extension; // get url extension
-app('request')->headers; // all http headers
-app('request')->method; // Request method
-app('request')->query; // $_GET
-app('request')->body; // $_POST and php://input
-app('request')->args; // all route args
-app('request')->files; // $_FILES
-app('request')->cookies; // $_COOKIE
-app('request')->ajax; // check if request is sent by ajax or not
-app('request')->ip(); // get client IP
-app('request')->browser(); // get client browser
-app('request')->platform(); // get client platform
-app('request')->isMobile(); // check if client opened from mobile or tablet
-
-// You can append vars functions classes to request class
-app('request')->addsomething = function(){
-    return 'something';
+app()->adder = function ($a, $b) {
+    return $a + $b;
 };
+echo app()->adder(2, 3); // 5
 ```
 
-## Autoload
+## License
 
-```php
-<?php
-namespace App;
-class homeController
-{
-    public function index()
-    {
-        # code...
-    }
-}
-```
+RouteKit is open-sourced software licensed under the [MIT license](LICENSE).
 
-```php
-// Call the class with a namespace
-$route->get('/', 'App\homeController@index');
-```
